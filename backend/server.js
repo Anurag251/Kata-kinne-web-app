@@ -36,17 +36,6 @@ app.prepare().then(() => {
   //parse json
   server.use(bodyParser.json());
 
-  //cookie configuration
-  server.use(
-    cookieParser({
-      cookie: {
-        sameSite: "strict",
-        httpOnly: true,
-        secure: process.env.HTTPS,
-      },
-    })
-  );
-
   //   //csrf token
   //   server.use(
   //     csrf({
@@ -65,6 +54,17 @@ app.prepare().then(() => {
 
   //helmet
   server.use(helmet());
+
+  //cookie configuration
+  server.use(
+    cookieParser({
+      cookie: {
+        sameSite: "strict",
+        httpOnly: true,
+        secure: process.env.HTTPS,
+      },
+    })
+  );
 
   //   //prevent ddos and bruteforce
   //   server.use(

@@ -15,6 +15,64 @@ const UserRefreshToken = mongoose.model("UserRefreshToken");
 const encryptedToken = require("../middleware/encryptedToken");
 const generateAccessToken = require("../middleware/generateAccessToken");
 
+router.post("/login", async (req, res) => {
+  try {
+    const email = sanitize(req.body.email);
+    const password = sanitize(req.body.password);
+
+    const user = await User.findOne({ email });
+
+    if (user === null) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid credentials.",
+      });
+    }
+
+    try {
+      await user.comparePassword(password);
+
+      const accessToken = generateAccessToken({ id: user._id });
+
+      const rt = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
+        expiresIn: "30d",
+      });
+
+      const refreshToken = encryptedToken(rt);
+
+      const userRefreshToken = new UserRefreshToken({
+        refreshToken: rt,
+        email,
+      });
+
+      await userRefreshToken.save();
+
+      res.cookie("rt", refreshToken, {
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24 * 30, //30 days
+        secure: process.env.HTTPS,
+        sameSite: "strict",
+      });
+
+      return res.status(200).json({
+        status: true,
+        message: "Login successful",
+        token: accessToken,
+      });
+    } catch (error) {
+      return res.status(200).json({
+        status: false,
+        message: "Invalid Password",
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: "Something went wrong.",
+    });
+  }
+});
+
 router.post("/signup", async (req, res) => {
   try {
     const name = sanitize(req.body.name);
@@ -185,6 +243,93 @@ router.post("/signup", async (req, res) => {
       message: "Something went wrong.",
     });
   }
+});
+
+router.post("/token", async (req, res) => {
+  try {
+    const encryptedRefreshToken = String(sanitize(req.cookies.rt));
+
+    if (encryptedRefreshToken === null) {
+      return res.status(200).json({
+        status: false,
+        message: "Not Authorized.",
+      });
+    }
+
+    const refreshToken = sanitize(encryptedRefreshToken)
+      .split("")
+      .map((element) =>
+        element == " "
+          ? element
+          : String.fromCharCode(
+              element.charCodeAt(0) + parseInt(process.env.NUMBEROFCHARS)
+            )
+      )
+      .join("");
+
+    const userRefreshToken = await UserRefreshToken.findOne({
+      refreshToken,
+    });
+
+    if (!userRefreshToken) {
+      return res.status(200).json({
+        status: false,
+        message: "Not Authorized",
+      });
+    }
+
+    //verify the refresh token
+    const verified = jwt.verify(
+      userRefreshToken.refreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    if (!verified) {
+      return res.status(200).json({
+        status: false,
+        message: "Not Authorized",
+      });
+    }
+
+    //generate access token
+    const accessToken = generateAccessToken({ id: verified.id });
+
+    //send the response
+    return res.status(200).json({
+      status: true,
+      message: "Token Regenerated",
+      token: accessToken,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: "Something went wrong.",
+    });
+  }
+});
+
+router.delete("/logout", async (req, res) => {
+  const refreshToken = sanitize(String(req.cookies.rt))
+    .split("")
+    .map((element) =>
+      element == " "
+        ? element
+        : String.fromCharCode(
+            element.charCodeAt(0) + parseInt(process.env.NUMBEROFCHARS)
+          )
+    )
+    .join("");
+
+  await UserRefreshToken.findOneAndDelete({
+    refreshToken: refreshToken,
+  });
+
+  // res.clearCookie("rt");
+
+  return res.status(200).json({
+    status: true,
+    message: "Logout successful",
+  });
 });
 
 module.exports = router;
