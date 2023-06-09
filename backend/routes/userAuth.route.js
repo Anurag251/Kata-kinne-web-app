@@ -15,6 +15,8 @@ const UserRefreshToken = mongoose.model("UserRefreshToken");
 const encryptedToken = require("../middleware/encryptedToken");
 const generateAccessToken = require("../middleware/generateAccessToken");
 
+const decryptedToken = require("../middleware/decryptedToken");
+
 router.post("/login", async (req, res) => {
   try {
     const email = sanitize(req.body.email);
@@ -256,16 +258,7 @@ router.post("/token", async (req, res) => {
       });
     }
 
-    const refreshToken = sanitize(encryptedRefreshToken)
-      .split("")
-      .map((element) =>
-        element == " "
-          ? element
-          : String.fromCharCode(
-              element.charCodeAt(0) + parseInt(process.env.NUMBEROFCHARS)
-            )
-      )
-      .join("");
+    const refreshToken = decryptedToken(sanitize(encryptedRefreshToken));
 
     const userRefreshToken = await UserRefreshToken.findOne({
       refreshToken,
@@ -309,27 +302,25 @@ router.post("/token", async (req, res) => {
 });
 
 router.delete("/logout", async (req, res) => {
-  const refreshToken = sanitize(String(req.cookies.rt))
-    .split("")
-    .map((element) =>
-      element == " "
-        ? element
-        : String.fromCharCode(
-            element.charCodeAt(0) + parseInt(process.env.NUMBEROFCHARS)
-          )
-    )
-    .join("");
+  try {
+    const refreshToken = decryptedToken(sanitize(req.cookies.rt));
 
-  await UserRefreshToken.findOneAndDelete({
-    refreshToken: refreshToken,
-  });
+    await UserRefreshToken.findOneAndDelete({
+      refreshToken: refreshToken,
+    });
 
-  // res.clearCookie("rt");
+    res.clearCookie("rt");
 
-  return res.status(200).json({
-    status: true,
-    message: "Logout successful",
-  });
+    return res.status(200).json({
+      status: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: "Failed to log out.",
+    });
+  }
 });
 
 module.exports = router;

@@ -115,6 +115,19 @@ app.prepare().then(() => {
     return handle(req, res);
   });
 
+  //if any syntax error occurs
+  server.use(function (err, req, res, next) {
+    if (err.code === "EBADCSRFTOKEN") {
+      // handle CSRF token errors here
+      res.status(403);
+      return res.json({ status: false, message: "Not a valid address." });
+    }
+
+    return res
+      .status(err.status || 500)
+      .json({ status: false, message: "Syntax Error!" });
+  });
+
   server.listen(PORT, (err) => {
     if (err) throw err;
     console.log(`> Ready on http://localhost:${PORT}`, process.pid);
